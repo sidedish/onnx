@@ -288,12 +288,16 @@ class OpSet_Onnx_ver3 {
 
 // Forward declarations for ai.onnx version 4
 class ONNX_OPERATOR_SET_SCHEMA_CLASS_NAME(Onnx, 4, Concat);
+class ONNX_OPERATOR_SET_SCHEMA_CLASS_NAME(Onnx, 4, Stack);
+class ONNX_OPERATOR_SET_SCHEMA_CLASS_NAME(Onnx, 4, ResizeBilinear);
 
 // Iterate over schema from ai.onnx version 4
 class OpSet_Onnx_ver4 {
  public:
   static void ForEachSchema(std::function<void(OpSchema&&)> fn) {
     fn(GetOpSchema<ONNX_OPERATOR_SET_SCHEMA_CLASS_NAME(Onnx, 4, Concat)>());
+    fn(GetOpSchema<ONNX_OPERATOR_SET_SCHEMA_CLASS_NAME(Onnx, 4, Stack)>());
+    fn(GetOpSchema<ONNX_OPERATOR_SET_SCHEMA_CLASS_NAME(Onnx, 4, ResizeBilinear)>());
   }
 };
 

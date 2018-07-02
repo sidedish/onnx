@@ -248,6 +248,133 @@ ONNX_OPERATOR_SET_SCHEMA(
           }
         }));
 
+ONNX_OPERATOR_SET_SCHEMA(
+    Stack,
+    4,
+    OpSchema()
+        .Attr("axis", "Which axis to stack on", AttributeProto::INT)
+        .SetDoc("Stack a list of tensors into a single tensor")
+        .Input(
+            0,
+            "inputs",
+            "List of tensors for stack",
+            "T",
+            OpSchema::Variadic)
+        .Output(0, "stack_result", "Stacked tensor", "T")
+        .TypeConstraint(
+            "T",
+            OpSchema::all_tensor_types(),
+            "Constrain output types to any tensor type.")
+        .TypeAndShapeInferenceFunction([](InferenceContext& ctx) {
+          propagateElemTypeFromInputToOutput(ctx, 0, 0);
+          auto numInputs = ctx.getNumInputs();
+          if (numInputs < 1 ||
+              !hasNInputShapes(ctx, static_cast<int>(numInputs))) {
+            return;
+          }
+
+          auto rank = ctx.getInputType(0)->tensor_type().shape().dim_size();
+
+          auto axisAttr = ctx.getAttribute("axis");
+          if (!axisAttr) {
+            fail_shape_inference("Required attribute axis is missing");
+          }
+          int axis = static_cast<int>(axisAttr->i());
+          if (axis < 0) {
+            return; // TODO: check if negative axis must be supported
+          }
+
+          auto* output_shape =
+              ctx.getOutputType(0)->mutable_tensor_type()->mutable_shape();
+
+          int out_rank = rank + 1;
+
+          for (int64_t i = 0; i < out_rank; ++i) {
+            output_shape->add_dim();
+          }
+
+          for (size_t i = 1; i < numInputs; i++) {
+            const auto& old_shape = ctx.getInputType(i - 1)->tensor_type().shape();
+            const auto& shape = ctx.getInputType(i)->tensor_type().shape();
+            if (shape.dim_size() != rank)
+              fail_shape_inference("All inputs to Stack must have same rank");
+            for (int j = 0; j < rank; j++) {
+              if (shape.dim(j).has_dim_value()) {
+                if (old_shape.dim(j).has_dim_value()) {
+                  if (shape.dim(j).dim_value() !=
+                      old_shape.dim(j).dim_value()) {
+                    fail_shape_inference("Dimension mismatch");
+                    ;
+                  }
+                }
+              }
+            }
+          }
+
+          const auto& input_shape = ctx.getInputType(0)->tensor_type().shape();
+          for (size_t i = 0; i < axis; i++) {
+            output_shape->mutable_dim(i)->set_dim_value(input_shape.dim(i).dim_value());
+          }
+
+          for (size_t i = axis + 1; i < input_shape.dim_size(); i++) {
+            output_shape->mutable_dim(i)->set_dim_value(input_shape.dim(i - 1).dim_value());
+          }
+
+          output_shape->mutable_dim(axis)->set_dim_value(static_cast<int>(numInputs));
+        }));
+
+ONNX_OPERATOR_SET_SCHEMA(
+    ResizeBilinear,
+    4,
+    OpSchema()
+        .Attr(
+            "align_corners",
+            "If 1, the centers of the 4 corner pixels of the input and output tensors are aligned, preserving the values at the corner pixels. Defaults to false.",
+            AttributeProto::INT)
+        .SetDoc("Resize images to size using bilinear interpolation.")
+        .Input(
+            0,
+            "inputs",
+            "tensor and size for ResizeBilinear",
+            "T",
+            OpSchema::Variadic)
+        .Output(0, "output", "Resized tensor", "T")
+        .TypeConstraint(
+            "T",
+            OpSchema::all_tensor_types(),
+            "Constrain output types to any tensor type.")
+        .TypeAndShapeInferenceFunction([](InferenceContext& ctx) {
+          propagateElemTypeFromInputToOutput(ctx, 0, 0);
+
+          auto input_shape = ctx.getInputType(0)->tensor_type().shape();
+          auto size_shape = ctx.getInputType(1)->tensor_type().shape();
+
+          if (input_shape.dim_size() != 4) {
+            fail_shape_inference("Rank of input tensor must be 4");
+          }
+
+          if (size_shape.dim_size() != 2) {
+            fail_shape_inference("Rank of size must be 2");
+          }
+
+          auto alignCornersAttr = ctx.getAttribute("align_corners");
+          if (!alignCornersAttr) {
+            fail_shape_inference("Required attribute axis is missing");
+          }
+          int align_corners = static_cast<int>(alignCornersAttr->i());
+          if (align_corners > 0) {
+            return; // TODO: support align_corners
+          }
+
+          auto* output_shape =
+              ctx.getOutputType(0)->mutable_tensor_type()->mutable_shape();
+
+          output_shape->mutable_dim(0)->set_dim_value(input_shape.dim(0).dim_value());
+          output_shape->mutable_dim(1)->set_dim_value(size_shape.dim(0).dim_value());
+          output_shape->mutable_dim(2)->set_dim_value(size_shape.dim(1).dim_value());
+          output_shape->mutable_dim(3)->set_dim_value(input_shape.dim(3).dim_value());
+        }));
+
 static const char* Split_ver2_doc =
     R"DOC(Split a tensor into a list of tensors, along the specified
 'axis'. Lengths of the parts can be specified using argument 'split'.
